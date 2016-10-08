@@ -8,6 +8,7 @@ and types = TyInt
            | TyBool
            | TyChan of types
            | TyFunc of (types list * types)
+           | TyVoid (* Only used as a return type *)
 
 and stmt = Seq of stmt * stmt
           | Go of stmt
@@ -72,6 +73,7 @@ let rec print_type t = match t with
   | TyBool -> "bool"
   | TyChan types -> String.concat "" ["chan "; print_type types]
   | TyFunc (paramTypes, retType) -> String.concat "" ["func("; String.concat ", " (List.map print_type paramTypes); ") "; print_type retType]
+  | TyVoid -> "void"
 
 let print_option_type t = match t with
   | None -> "void"
