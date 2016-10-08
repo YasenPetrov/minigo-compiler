@@ -1,0 +1,19 @@
+### Starting build.
+# Target: typecheck.ml.depends, tags: { extension:ml, file:typecheck.ml, ocaml, ocamldep, quiet }
+/usr/bin/ocamldep -modules typecheck.ml > typecheck.ml.depends
+# Target: ast.ml.depends, tags: { extension:ml, file:ast.ml, ocaml, ocamldep, quiet }
+/usr/bin/ocamldep -modules ast.ml > ast.ml.depends # cached
+# Target: ast.cmo, tags: { byte, compile, extension:cmo, extension:ml, file:ast.cmo, file:ast.ml, implem, ocaml, quiet }
+/usr/bin/ocamlc -c -o ast.cmo ast.ml # cached
+# Target: typecheck.cmo, tags: { byte, compile, extension:cmo, extension:ml, file:typecheck.cmo, file:typecheck.ml, implem, ocaml, quiet }
+/usr/bin/ocamlc -c -o typecheck.cmo typecheck.ml
+# Target: ast.cmx, tags: { compile, extension:cmx, extension:ml, file:ast.cmx, file:ast.ml, implem, native, ocaml, quiet }
+/usr/bin/ocamlopt -c -o ast.cmx ast.ml
++ /usr/bin/ocamlopt -c -o ast.cmx ast.ml
+File "ast.ml", line 53, characters 4-12:
+Warning 11: this match case is unused.
+# Target: typecheck.cmx, tags: { compile, extension:cmx, extension:ml, file:typecheck.cmx, file:typecheck.ml, implem, native, ocaml, quiet }
+/usr/bin/ocamlopt -c -o typecheck.cmx typecheck.ml
+# Target: typecheck.native, tags: { dont_link_with, extension:native, file:typecheck.native, link, native, ocaml, program, quiet }
+/usr/bin/ocamlopt ast.cmx typecheck.cmx -o typecheck.native
+# Compilation successful.
