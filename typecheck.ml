@@ -147,13 +147,39 @@ let rec typeCheckStmt env stmt = match stmt with
                     | Some _ -> Some env
                     | None   -> None
 
-(* let signatureFromProc p = match p with
-  | (name, [], None)        -> ()
-  | (name, params, None)    -> expr2
-  | (name, [], retType)     -> expr2
-  | (name, params, retType) -> expr2 *)
+(* Process a proc - return a binding of type (string * types) *)
+let signatureFromProc p = match p with
+  | Proc (name, [], retType, _)     -> (name, TyFunc([], retType))
+  | Proc (name, params, retType, _) -> let paramTypes = List.map (fun (_, t) -> t) params in
+                                       (name, TyFunc(paramTypes, retType))
 
+(* Get all the signatures from a program - return an environment *)
+let collectSignatures program = match program with
+  | Prog(procs, _) -> List.map signatureFromProc procs
 
+(*
+   Typecheck function bodies after collecting signatures -
+   we do not include anything in the function bodies in our global env,
+   so this function is boolean
+*)
+let rec typeCheckProcs env procs = match procs with
+  | []     -> true
+  | p::ps  -> match p with
+            | Proc (_,_,_, body) -> match (typeCheckStmt env body) with
+                                  | Some _ -> typeCheckProcs env ps
+                                  | None   -> false
+(*
+ Provided with the function signatures, see if the function bodies typecheck
+ and if so, typecheck the main body
+*)
+let typeCheckProgWithSignatures env program = match program with
+  | Prog (procs, mainBody) -> if typeCheckProcs env procs
+                              then typeCheckStmt env mainBody
+                              else None
+
+(* Collect signatures, perform full typecheck*)
+let typeCheckProg program = let env = collectSignatures program
+                            in typeCheckProgWithSignatures env program
 (*
 
 What's still missing are implementations for
