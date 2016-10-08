@@ -1,1 +1,6 @@
 _build/*
+*native
+parser.ml
+parser.mli
+lexer.ml
+lexer.mli
