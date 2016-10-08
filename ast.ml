@@ -2,7 +2,7 @@
 
 type prog = Prog of (proc list) * stmt
 
-and proc = Proc of string * ((exp * types) list) * (types option) * stmt
+and proc = Proc of string * ((exp * types) list) * types * stmt
 
 and types = TyInt
            | TyBool
@@ -75,14 +75,10 @@ let rec print_type t = match t with
   | TyFunc (paramTypes, retType) -> String.concat "" ["func("; String.concat ", " (List.map print_type paramTypes); ") "; print_type retType]
   | TyVoid -> "void"
 
-let print_option_type t = match t with
-  | None -> "void"
-  | Some tp -> print_type tp
-
 let rec print_proc p = match p with
   | Proc(name, params, retType, stmt) -> let print_param (e, t) = String.concat " " [print_exp e; print_type t]
     in let argString = String.concat ", " (List.map print_param params)
-      in String.concat "" ["Proc("; name; "("; argString; ") "; print_option_type retType; " {\n"; print_stmt stmt; "})"]
+      in String.concat "" ["Proc("; name; "("; argString; ") "; print_type retType; " {\n"; print_stmt stmt; "})"]
 
 let rec print_prog p = match p with
   | Prog(procs, block) -> let procsString = (String.concat "\n" (List.map (print_proc) procs))

@@ -50,9 +50,9 @@
       TY_FUNC LPAREN params RPAREN retType   { TyFunc($3, $5) }
   ;*/
   retType:
-      |                           { None }
-      | TY_INT                    { Some TyInt }
-      | TY_BOOL                   { Some TyBool }
+      |                           { TyVoid }
+      | TY_INT                    { TyInt }
+      | TY_BOOL                   { TyBool }
       /*| funcSign                  { Some $1 }*/
   ;
   block:
