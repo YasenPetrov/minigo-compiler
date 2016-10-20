@@ -1,5 +1,17 @@
 open Ast;;
 
+exception TypeError of string
+exception ParseError of string
+
+let raise_undecl_var n = raise (TypeError (String.concat "" ["Undeclared variable: "; n]))
+
+let raise_expected_other_type exp act = let act_type_string = match act with
+  | Some t -> print_type t
+  | None -> "None"
+  in raise (TypeError (String.concat "" ["Type mismatch: expected "; print_type exp; " but got "; act_type_string]))
+
+let raise_cannot_compare t1 t2 = raise (TypeError (String.concat "" ["Type mismatch: cannot compare "; print_type t1; " and "; print_type t2]))
+
 (* equality among types *)
 let rec eqTy t1 t2 = match (t1,t2) with
   | (TyInt, TyInt) -> true
@@ -26,7 +38,7 @@ let lookup el lst = try (Some (snd (List.find (fun (el2,_) -> el = el2) lst))) w
 (* Update an environment with a tuple (v, t) - previous bindings for v are
 overwrtirren *)
 let update env binding = match binding with
-  | (v, t) -> (v, t) :: List.filter (fun (v1, _) -> v1 <> v1) env
+  | (v, t) -> (v, t) :: List.filter (fun (v1, _) -> v <> v1) env
 
 
 (* Implementation of G |- exp : t where we use 'option' to report failure *)
@@ -34,40 +46,47 @@ let rec inferTyExp env e = match e with
   | And (e1, e2)     ->   let (t1, t2) = (inferTyExp env e1, inferTyExp env e2) in
                           (match (t1, t2) with
                           | (Some TyBool, Some TyBool) -> Some TyBool
-                          | _                          -> None)
+                          | (Some TyBool, t)           -> raise_expected_other_type TyBool t
+                          | (t, _)                     -> raise_expected_other_type TyBool t)
   | Eq (e1, e2)      ->   let (t1, t2) = (inferTyExp env e1, inferTyExp env e2) in
                           (match (t1, t2) with
                           | (Some TyBool, Some TyBool)  -> Some TyBool
                           | (Some TyInt, Some TyInt)    -> Some TyBool
                           | (Some TyFunc _, Some TyFunc _)  -> Some TyBool
                           | (Some TyChan _, Some TyChan _)  -> Some TyBool
-                          | _                           -> None)
+                          | (Some c1, Some c2)              -> raise_cannot_compare c1 c2
+                          | _                               -> None)
   | Gt (e1, e2)      ->   let (t1, t2) = (inferTyExp env e1, inferTyExp env e2) in
                           (match (t1, t2) with
                           | (Some TyBool, Some TyBool)  -> Some TyBool
                           | (Some TyInt, Some TyInt)    -> Some TyBool
+                          | (Some c1, Some c2)          -> raise_cannot_compare c1 c2
                           (* | (Some TyFunc _, Some TyFunc _)  -> Some TyBool
                           | (Some TyChan _, Some TyChan _)  -> Some TyBool *)
                           | _                           -> None)
   | Plus (e1, e2)     ->  let (t1, t2) = (inferTyExp env e1, inferTyExp env e2) in
                           (match (t1, t2) with
                           | (Some TyInt, Some TyInt)    -> Some TyInt
-                          | _                           -> None)
+                          | (Some TyInt, t)             -> raise_expected_other_type TyInt t
+                          | (t, _)                      -> raise_expected_other_type TyInt t)
   | Minus (e1, e2)    ->  let (t1, t2) = (inferTyExp env e1, inferTyExp env e2) in
                           (match (t1, t2) with
                           | (Some TyInt, Some TyInt)    -> Some TyInt
-                          | _                           -> None)
+                          | (Some TyInt, t)             -> raise_expected_other_type TyInt t
+                          | (t, _)                      -> raise_expected_other_type TyInt t)
   | Times (e1, e2)    ->  let (t1, t2) = (inferTyExp env e1, inferTyExp env e2) in
                           (match (t1, t2) with
                           | (Some TyInt, Some TyInt)    -> Some TyInt
-                          | _                           -> None)
+                          | (Some TyInt, t)             -> raise_expected_other_type TyInt t
+                          | (t, _)                      -> raise_expected_other_type TyInt t)
   | Division (e1, e2) ->  let (t1, t2) = (inferTyExp env e1, inferTyExp env e2) in
                           (match (t1, t2) with
                           | (Some TyInt, Some TyInt)    -> Some TyInt
-                          | _                           -> None)
+                          | (Some TyInt, t)             -> raise_expected_other_type TyInt t
+                          | (t, _)                      -> raise_expected_other_type TyInt t)
   | Not e             ->  (match (inferTyExp env e) with
                           | Some TyBool                 -> Some TyBool
-                          | _                           -> None)
+                          | t                           -> raise_expected_other_type TyInt t)
   | RcvExp name       ->  (match (lookup name env) with
                           | Some TyChan t               -> Some t
                           | _                           -> None)
@@ -109,9 +128,11 @@ let rec typeCheckStmt env stmt = match stmt with
   | RcvStmt name  -> (match (lookup name env) with
                     | Some (TyChan TyInt)  -> Some env
                     | _             -> None) (* We only support integer channels *)
-  | Decl (n, e)   -> (match (inferTyExp env e) with
-                    | Some t        -> Some (update env (n, t)) (* If the expr typechecks, add the binding to the env*)
-                    | None          -> None)
+  | Decl (n, e)   -> (match (lookup n env) with
+                    | Some TyFunc _ -> None (* We support redeclarations as long as we don't take function names *)
+                    | _ -> (match (inferTyExp env e) with
+                            | Some t        -> Some (update env (n, t)) (* If the expr typechecks, add the binding to the env*)
+                            | None          -> None))
   | DeclChan name -> Some (update env (name, TyChan TyInt)) (* We only support integer channels *)
   | Assign (v,e)  -> (match (lookup v env) with
                     | None -> None (* Unknown variable *)
@@ -143,9 +164,10 @@ let rec typeCheckStmt env stmt = match stmt with
                                                       then Some env
                                                       else None
                     | _                       -> None)
-  | Print exp      -> match (inferTyExp env exp) with
+  | Print exp      -> (match (inferTyExp env exp) with
                     | Some _ -> Some env
-                    | None   -> None
+                    | None   -> None)
+  | Skip           -> Some env
 
 (* Process a proc - return a binding of type (string * types) *)
 let signatureFromProc p = match p with
@@ -191,3 +213,8 @@ What's still missing are implementations for
 (3) type checking of the main program.
 
  *)
+
+ let rec print_env env = match env with
+  | []    -> ""
+  | b::bs -> (match b with
+              | (n, t) -> String.concat "" [n; " -> "; print_type t; "\n"; print_env bs])
