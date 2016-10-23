@@ -40,7 +40,6 @@ and exp = And of exp * exp
 
 
 let rec print_exp exp = match exp with
-  | Var s               -> String.concat "" ["Var "; s]
   | And (e1, e2)        -> String.concat "" ["("; print_exp e1; " && "; print_exp e2; ")"]
   | Eq (e1, e2)         -> String.concat "" ["("; print_exp e1; " == "; print_exp e2; ")"]
   | Gt (e1, e2)         -> String.concat "" ["("; print_exp e1; " > "; print_exp e2; ")"]
@@ -58,7 +57,7 @@ let rec print_exp exp = match exp with
 let rec print_stmt stmt = match stmt with
   | Seq(s1, s2)       -> String.concat "" [print_stmt s1; ";\n"; print_stmt s2]
   | Go(s)             -> String.concat "" ["go { \n"; print_stmt s; "}"]
-  | Transmit(name, e) -> String.concat "" ["Transmit("; name; "->"; print_exp e; ")"]
+  | Transmit(name, e) -> String.concat "" ["Transmit("; name; "<-"; print_exp e; ")"]
   | RcvStmt(name)     -> String.concat "" ["Receive(<-"; name; ")"]
   | Decl(name, e)     -> String.concat "" ["Decl("; name; " := "; print_exp e; ") "]
   | DeclChan(name)    -> String.concat "" ["DeclChan("; name; " := "; "newChannel"; ") "]
@@ -68,6 +67,7 @@ let rec print_stmt stmt = match stmt with
   | Return(e)         -> String.concat "" ["Return("; print_exp e; ")"]
   | FuncCall(name, args) -> String.concat "" ["FuncCall("; name; "("; String.concat ", " (List.map print_exp args); "))"]
   | Print(e)          -> String.concat "" ["Print("; print_exp e; ")"]
+  | Skip              -> "Skip"
 
 let rec print_type t = match t with
   | TyInt -> "int"
@@ -75,6 +75,10 @@ let rec print_type t = match t with
   | TyChan types -> String.concat "" ["chan "; print_type types]
   | TyFunc (paramTypes, retType) -> String.concat "" ["func("; String.concat ", " (List.map print_type paramTypes); ") "; print_type retType]
   | TyVoid -> "void"
+
+let print_type_opt t = (match t with
+  | None    -> "None"
+  | Some t  -> print_type t)
 
 let rec print_proc p = match p with
   | Proc(name, params, retType, stmt) -> let print_param (e, t) = String.concat " " [print_exp e; print_type t]
@@ -96,6 +100,11 @@ let rec normalizeExp e = match e with
                     let r2 = normalizeExp e2 in
                     (Seq (fst r1, fst r2),
                      And (snd r1, snd r2))
+
+ | Eq (e1, e2) -> let r1 = normalizeExp e1 in
+                   let r2 = normalizeExp e2 in
+                   (Seq (fst r1, fst r2),
+                    Eq (snd r1, snd r2))
 
   | Gt (e1, e2) ->  let r1 = normalizeExp e1 in
                     let r2 = normalizeExp e2 in
@@ -177,6 +186,7 @@ let rec normalizeStmt s = match s with
 let normalizeProc p = match p with
     Proc (x, args, tys, s) -> Proc (x, args, tys, normalizeStmt s)
 
+let a = Prog ( [], While((Var "x"), Print (Plus(Var "x", Var "x"))));;
 
 let normalizeProg p = match p with
     Prog (ps, s) -> Prog (List.map normalizeProc ps, normalizeStmt s)

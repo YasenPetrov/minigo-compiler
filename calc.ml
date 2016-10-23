@@ -22,7 +22,8 @@ let ch = open_in "l.txt" in
           while true do
             try
               let result = Parser.main Lexer.token lexbuf in
-                match typeCheckProg result with
+                let normalProg = normalizeProg result in
+                match typeCheckProg normalProg with
                 | Some e -> print_string (print_env e); print_string (print_prog result); print_newline(); flush stdout;
                 | None -> print_string "Typecheck error";  print_newline(); flush stdout;
             with Parsing.Parse_error ->
