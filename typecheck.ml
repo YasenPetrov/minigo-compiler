@@ -255,17 +255,6 @@ let typeCheckProgWithSignatures env program = match program with
 (* Collect signatures, perform full typecheck*)
 let typeCheckProg program = let env = collectSignatures program
                             in typeCheckProgWithSignatures env program
-(*
-
-What's still missing are implementations for
-
-(1) collection of type signatures from functions (procedures)
-
-(2) type checking of procedure bodies, and
-
-(3) type checking of the main program.
-
- *)
 
  let rec print_env env = match env with
   | []    -> ""
