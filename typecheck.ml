@@ -139,12 +139,12 @@ let rec typeCheckStmt env stmt = (match stmt with
                                  | Some t3 -> if eqTy t1 t3
                                               then Some env
                                               else raise_expected_other_type t1 (Some t3)))
-  | While (exp, s) -> (match (inferTyExp env exp) with
+  | While (exp, (l,s)) -> (match (inferTyExp env exp) with
                     | Some TyBool -> (match (typeCheckStmt env s) with
                                     | Some _ -> Some env (* Disregard whatever happens inside the block *)
                                     | None   -> None)
                     | t           -> raise_expected_other_type TyBool t) (* The condition must be boolean *)
-  | ITE (exp, s1, s2) -> (match (inferTyExp env exp) with
+  | ITE (exp, (l1, s1), (l2, s2)) -> (match (inferTyExp env exp) with
                     | Some TyBool -> (match (typeCheckStmt env s1, typeCheckStmt env s2) with
                                     | (Some _, Some _) -> Some env (* Disregard whatever happens inside the blocks *)
                                     | _                -> None)
@@ -174,8 +174,8 @@ let rec hasReturnStatement stmt = (match stmt with
   | Return _        -> true
   | Seq (s1, s2)    -> (hasReturnStatement s1) || (hasReturnStatement s2)
   | Go s            -> hasReturnStatement s
-  | While (_, s)    -> hasReturnStatement s
-  | ITE (_, s1, s2) -> (hasReturnStatement s1) || (hasReturnStatement s2)
+  | While (_, (l, s))    -> hasReturnStatement s
+  | ITE (_, (l1,s1), (l2,s2)) -> (hasReturnStatement s1) || (hasReturnStatement s2)
   | _               -> false)
 
 let rec hasReturnStatementOnThisLevel stmt = match stmt with
@@ -193,8 +193,8 @@ let rec inferReturnType stmt env = (match stmt with
                 | (None, Some t)     -> Some t
                 | _                  -> None)
   | Go s -> inferReturnType s env
-  | While (_, s)    -> inferReturnType s env
-  | ITE (_, s1, s2) -> (match (inferReturnType s1 env, inferReturnType s2 env) with
+  | While (_, (l,s))    -> inferReturnType s env
+  | ITE (_, (l1,s1), (l2,s2)) -> (match (inferReturnType s1 env, inferReturnType s2 env) with
                 | (Some t1, Some t2) -> if eqTy t1 t2
                                         then Some t1
                                         else raise (TypeError "Different paths lead to different return types")
@@ -229,7 +229,7 @@ let rec updateEnvWithArgs env args = (match args with
 let rec typeCheckProcs env procs = (match procs with
   | []     -> true
   | p::ps  -> (match p with
-            | Proc (n, args, retType, body) -> let envWithArgs = updateEnvWithArgs env args in
+            | Proc (n, args, retType, (locals, body)) -> let envWithArgs = updateEnvWithArgs env args in
                                               (match (typeCheckStmt envWithArgs body) with
                                                 | Some funcEnv -> (match retType with
                                                           | TyVoid -> if hasReturnStatement body
