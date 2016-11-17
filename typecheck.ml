@@ -29,6 +29,14 @@ overwrtirren *)
 let update env binding = match binding with
   | (v, t) -> (v, t) :: List.filter (fun (v1, _) -> v <> v1) env
 
+(* Returns e1 - e2 (set substraction) *)
+let rec envDiff e1 e2 = (match e1 with
+  | [] -> []
+  | (n, t)::rest -> (match (lookup n e2) with
+    | None -> (n,t)::(envDiff rest e2)
+    | Some _ -> envDiff rest e2
+    )
+  )
 
 (* Implementation of G |- exp : t where we use 'option' to report failure *)
 let rec inferTyExp env e = match e with
@@ -107,52 +115,56 @@ let rec inferTyExp env e = match e with
 *)
 let rec typeCheckStmt env stmt = (match stmt with
   | Seq (s1, s2)  -> (match (typeCheckStmt env s1) with
-                    | Some e  -> typeCheckStmt e s2  (* If s1 typechecks, typecheck s2 with the new env*)
-                    | None    -> None)
+                    | new_st, Some e  -> Seq(new_st, fst (typeCheckStmt e s2)), (snd (typeCheckStmt e s2))  (* If s1 typechecks, typecheck s2 with the new env*)
+                    | new_st, None    -> Skip, None)
   | Go s          -> (match (typeCheckStmt env s) with
-                    | Some _  -> Some env (* Whaterver happens inside the block is not propagated outwith it - we return env*)
-                    | None    -> None)
+                    | new_st, Some _  -> (Go new_st), (Some env) (* Whaterver happens inside the block is not propagated outwith it - we return env*)
+                    | new_st, None    -> Skip, None)
   | Transmit (n, e) -> (match (lookup n env) with
                     | Some (TyChan TyInt) -> (match (inferTyExp env e) with
-                                    | Some TyInt  -> Some env
-                                    | _           -> None)
+                                    | Some TyInt  -> (Transmit (n, e)), (Some env)
+                                    | _           -> Skip, None)
                     | Some t       -> raise_expected_other_type (TyChan TyInt) (Some t)
                     | _            -> raise_undecl_var n) (* We only support integer channels *)
   | RcvStmt name  -> (match (lookup name env) with
-                    | Some (TyChan TyInt)  -> Some env
+                    | Some (TyChan TyInt)  -> (RcvStmt name), (Some env)
                     | Some t       -> raise_expected_other_type (TyChan TyInt) (Some t)
                     | _            -> raise_undecl_var name) (* We only support integer channels *)
   | Decl (n, e)   -> (match (lookup n env) with
                     | Some TyFunc _ -> raise_function_redeclaration n (* We support redeclarations as long as we don't take function names *)
                     | _ -> (match (inferTyExp env e) with
-                            | Some t        -> Some (update env (n, t)) (* If the expr typechecks, add the binding to the env*)
-                            | None          -> None))
+                            | Some (TyChan _) -> raise_cannot_declate_var_and_assign_to_chan n
+                            | Some t        -> Decl (n, e), Some (update env (n, t)) (* If the expr typechecks, add the binding to the env*)
+                            | None          -> Skip, None))
   (* Why not check if name is a func name *)
   | DeclChan name -> (match (lookup name env) with
                       | Some TyFunc _ -> raise_function_redeclaration name
-                      | _             -> Some (update env (name, TyChan TyInt))) (* We only support integer channels *)
+                      | _             -> DeclChan name, Some (update env (name, TyChan TyInt))) (* We only support integer channels *)
   | Assign (v,e)  -> (match (lookup v env) with
                     | None -> raise_undecl_var v (* Unknown variable *)
                     | Some t1 -> let t2 = inferTyExp env e in
                                  (match t2 with
                                  | None -> raise_expected_other_type t1 None
                                  | Some t3 -> if eqTy t1 t3
-                                              then Some env
+                                              then Assign (v, e), Some env
                                               else raise_expected_other_type t1 (Some t3)))
   | While (exp, (l,s)) -> (match (inferTyExp env exp) with
                     | Some TyBool -> (match (typeCheckStmt env s) with
-                                    | Some _ -> Some env (* Disregard whatever happens inside the block *)
-                                    | None   -> None)
+                                    | new_body, Some new_env -> let locs = envDiff new_env env in
+                                                      While (exp, ((Locals locs), new_body)), Some env (* Disregard whatever happens inside the block *)
+                                    | _, None   -> Skip, None)
                     | t           -> raise_expected_other_type TyBool t) (* The condition must be boolean *)
   | ITE (exp, (l1, s1), (l2, s2)) -> (match (inferTyExp env exp) with
                     | Some TyBool -> (match (typeCheckStmt env s1, typeCheckStmt env s2) with
-                                    | (Some _, Some _) -> Some env (* Disregard whatever happens inside the blocks *)
-                                    | _                -> None)
+                                    | ((new_if, Some if_env), (new_else, Some else_env)) -> let if_locs = envDiff if_env env in
+                                                                                            let else_locs = envDiff else_env env in
+                                                                                            ITE(exp, ((Locals if_locs), new_if), ((Locals else_locs), new_else)), Some env (* Disregard whatever happens inside the blocks *)
+                                    | _                -> Skip, None)
                     | t           -> raise_expected_other_type TyBool t) (* The condition must be boolean *)
   | Return exp     -> (match (inferTyExp env exp) with
                     | Some TyFunc _ -> raise (TypeError "Cannot return a function!")
-                    | Some _ -> Some env
-                    | None   -> None)
+                    | Some _ -> Return exp, Some env
+                    | None   -> Skip, None)
   | FuncCall (n, args) -> (match (lookup n env) with
                     | Some TyFunc (params, _) ->  if List.length params <> List.length args
                                                   then raise_function_count_mismatch n (List.length params) (List.length args)
@@ -161,13 +173,13 @@ let rec typeCheckStmt env stmt = (match stmt with
                                                                       | Some t  -> eqTy t ty) in
                                                        let argTypes = List.map (fun t -> inferTyExp env t) args in
                                                        if (List.for_all (fun (t1, t2) -> opTyEq t1 t2) (List.combine argTypes params))
-                                                       then Some env
+                                                       then FuncCall (n, args), Some env
                                                        else raise_function_arguments_mismatch n params argTypes
-                    | _                       -> None)
+                    | _                       -> Skip, None)
   | Print exp      -> (match (inferTyExp env exp) with
-                    | Some _ -> Some env
-                    | None   -> None)
-  | Skip           -> Some env)
+                    | Some _ -> Print exp, Some env
+                    | None   -> Skip, None)
+  | Skip           -> Skip, Some env)
 
 (* Is there at least one return statement? *)
 let rec hasReturnStatement stmt = (match stmt with
@@ -227,34 +239,40 @@ let rec updateEnvWithArgs env args = (match args with
    so this function is boolean
 *)
 let rec typeCheckProcs env procs = (match procs with
-  | []     -> true
+  | []     -> [], true
   | p::ps  -> (match p with
             | Proc (n, args, retType, (locals, body)) -> let envWithArgs = updateEnvWithArgs env args in
                                               (match (typeCheckStmt envWithArgs body) with
-                                                | Some funcEnv -> (match retType with
+                                                | new_body, Some funcEnv -> (match retType with
                                                           | TyVoid -> if hasReturnStatement body
                                                                       then raise_return_in_void_function n
-                                                                      else typeCheckProcs env ps
+                                                                      else let new_rest, result = typeCheckProcs env ps in
+                                                                           let new_locs = envDiff funcEnv env in
+                                                                           (Proc (n, args, retType, (Locals new_locs, new_body)))::new_rest, result
                                                           | t      -> if not (hasReturnStatementOnThisLevel body)
                                                                       then raise_no_top_level_return_statement n
                                                                       else (match inferReturnType body funcEnv with
                                                                             | Some t1 -> if (eqTy t1 t)
-                                                                                         then typeCheckProcs env ps
+                                                                                         then let new_rest, result = typeCheckProcs env ps in
+                                                                                              let new_locs = envDiff funcEnv env in
+                                                                                              (Proc (n, args, retType, (Locals new_locs, new_body)))::new_rest, result
                                                                                          else raise_returns_wrong_type n t1 t
                                                                             | None    -> raise_no_top_level_return_statement n))
-                                                | None   -> false)))
+                                                | _, None   -> [], false)))
 (*
  Provided with the function signatures, see if the function bodies typecheck
  and if so, typecheck the main body
 *)
 let typeCheckProgWithSignatures env program = match program with
-  | Prog (procs, mainBody) -> if typeCheckProcs env procs
-                              then typeCheckStmt env mainBody
-                              else None
+  | Prog (procs, mainBody) -> let new_procs, result = typeCheckProcs env procs in
+                              if result
+                              then  let new_body, main_env = typeCheckStmt env mainBody in
+                                    Prog (new_procs, new_body), main_env
+                              else Prog (new_procs, mainBody), None
 
 (* Collect signatures, perform full typecheck*)
-let typeCheckProg program = let env = collectSignatures program
-                            in typeCheckProgWithSignatures env program
+let typeCheckProg program = let env = collectSignatures program in
+                            typeCheckProgWithSignatures env program
 
  let rec print_env env = match env with
   | []    -> ""
