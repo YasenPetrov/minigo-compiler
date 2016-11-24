@@ -41,7 +41,7 @@ rule token = parse
   | "newChannel"                        { NEWCHANNEL }
   | "true"                              { CONST_BOOL (true) }
   | "false"                             { CONST_BOOL (false) }
-  | digit nonzero_digit* as i           { CONST_INT (int_of_string i)}
+  | '-'? (digit | (nonzero_digit digit*)) as i           { CONST_INT (int_of_string i)}
   | letter (letter | digit)* as name    { NAME(name) }
   (*| letter+ as name                     { FUNC_NAME(name) }*)
   | eof                                 { raise Eof }

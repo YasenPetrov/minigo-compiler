@@ -1,0 +1,71 @@
+func printOne() {
+  print 1
+}
+func printMe(x int) {
+  print x
+}
+func doubleMe(x int) int {
+  return x * 2
+}
+func maybeDoubleMe(x int, b bool) int {
+  if b {
+    return 2 * x
+  } else {
+    return x
+  };
+  return x
+}
+
+func fact(x int) int{
+  if 2 > x {
+    return x
+  } else {
+    return x * fact(x - 1)
+  };
+  return x
+}
+
+func pow(x int, n int) int {
+  i := 1;
+  res := 1;
+  while n + 1 > i {
+    res = res * x;
+    i = i + 1
+  };
+  return res
+}
+
+func printSteps(height int) {
+  i := 0;
+  while height > i {
+    num := pow(10, i);
+    j := i - 1;
+    while j > -1 {
+      num = num + pow(10, j);
+      j = j - 1
+    };
+    i = i + 1;
+    print num
+  }
+}
+
+{
+  x := 5;
+  a := false;
+  b := 2 > x;
+
+  printOne();
+  printMe(x);
+  x = doubleMe(x);
+  print(x);
+  y := maybeDoubleMe(x, !a);
+  print y;
+
+  i := 1;
+  while 10 > i {
+    print i;
+    print fact(i);
+    i = i + 1
+  };
+  printSteps(15)
+}

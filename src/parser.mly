@@ -6,13 +6,15 @@
   %token <int> CONST_INT
   %token NEWCHANNEL GO PRINT RETURN WHILE IF THEN ELSE TY_INT TY_BOOL TY_FUNC TY_CHAN_INT
   %token COMMA SEMICOLON
-  %token AND
-  %token EQUALS
-  %token GT
-  %token PLUS MINUS
-  %token TIMES DIV
-  %token NOT
-  %token LARROW           /*a <- b <- c should be a <- (b <- c), corect?*/
+  %right LARROW
+  %left EQUALS
+  %nonassoc AND
+  %left GT
+  %right NOT
+  %left PLUS MINUS
+  %left TIMES
+  %right DIV
+  %token LARROW EQUALS GT AND PLUS MINUS DIV TIMES NOT
   %token ASSIGN
   %token INIT
   %token LPAREN RPAREN
@@ -31,7 +33,7 @@
       |                           { [] }
       | proc procs                { $1 :: $2 }
   proc:
-      TY_FUNC NAME LPAREN params RPAREN retType block   { Proc( $2, $4, $6, $7 ) }
+      TY_FUNC NAME LPAREN params RPAREN retType block   { Proc( $2, $4, $6, (Locals [], $7) ) }
   ;
   params:
       |                           { [] }
@@ -66,8 +68,8 @@
       | NAME INIT exp             { Decl ($1, $3) }
       | NAME INIT NEWCHANNEL      { DeclChan ($1) }
       | NAME ASSIGN exp           { Assign ($1, $3) }
-      | WHILE exp block           { While ($2, $3) }
-      | IF exp block ELSE block   { ITE ($2, $3, $5) }
+      | WHILE exp block           { While ($2, (Locals [], $3)) }
+      | IF exp block ELSE block   { ITE ($2, (Locals [], $3), (Locals [], $5)) }
       | RETURN exp                { Return $2 }
       | NAME LPAREN args RPAREN   { FuncCall($1, $3) }
       | PRINT exp                 { Print $2 }

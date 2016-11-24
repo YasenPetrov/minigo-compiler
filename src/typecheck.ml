@@ -151,14 +151,15 @@ let rec typeCheckStmt env stmt = (match stmt with
   | While (exp, (l,s)) -> (match (inferTyExp env exp) with
                     | Some TyBool -> (match (typeCheckStmt env s) with
                                     | new_body, Some new_env -> let locs = envDiff new_env env in
-                                                      While (exp, ((Locals locs), new_body)), Some env (* Disregard whatever happens inside the block *)
+                                                      While (exp, ((Locals locs), new_body)), Some new_env (* Disregard whatever happens inside the block *)
                                     | _, None   -> Skip, None)
                     | t           -> raise_expected_other_type TyBool t) (* The condition must be boolean *)
   | ITE (exp, (l1, s1), (l2, s2)) -> (match (inferTyExp env exp) with
                     | Some TyBool -> (match (typeCheckStmt env s1, typeCheckStmt env s2) with
                                     | ((new_if, Some if_env), (new_else, Some else_env)) -> let if_locs = envDiff if_env env in
                                                                                             let else_locs = envDiff else_env env in
-                                                                                            ITE(exp, ((Locals if_locs), new_if), ((Locals else_locs), new_else)), Some env (* Disregard whatever happens inside the blocks *)
+                                                                                            let new_env = List.fold_left (fun acc x -> update acc x) if_env else_env in
+                                                                                            ITE(exp, ((Locals if_locs), new_if), ((Locals else_locs), new_else)), Some new_env (* Disregard whatever happens inside the blocks *)
                                     | _                -> Skip, None)
                     | t           -> raise_expected_other_type TyBool t) (* The condition must be boolean *)
   | Return exp     -> (match (inferTyExp env exp) with
@@ -272,7 +273,8 @@ let typeCheckProgWithSignatures env program = match program with
 
 (* Collect signatures, perform full typecheck*)
 let typeCheckProg program = let env = collectSignatures program in
-                            typeCheckProgWithSignatures env program
+                            let func_names = List.map (fun x -> fst(x)) env in
+                            (typeCheckProgWithSignatures env program), func_names
 
  let rec print_env env = match env with
   | []    -> ""
